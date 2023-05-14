@@ -36,7 +36,7 @@ def modify_input_file(base_file,out_file,inp_dict):
             write_hydrodyn_KDAdd(out_file,KDAdd_dict=KDAdd_dict,first_row=68)
         
 
-def modify_fst_deck(fst_dir,fst_file,out_dir='.',suffix='',wave_suffix='',wind_suffix='',dof_suffix='',
+def modify_fst_deck(fst_dir,fst_file,out_dir='.',suffix='',env_suffix='',wave_suffix='',wind_suffix='',dof_suffix='',
                     fst_dict={},aero_dict={},hydro_dict={},elasto_dict={},inflow_dict={},servo_dict={}):
     """
     Reads a working OpenFAST model input files, modifies the desired files and writes them in the desired directory.    
@@ -77,7 +77,7 @@ def modify_fst_deck(fst_dir,fst_file,out_dir='.',suffix='',wave_suffix='',wind_s
     # read .fst file and get the root name and out .fst file name
     fst = fstin(os.path.join(fst_dir,fst_file))
     fst_root = fst_file.strip('.fst')
-    fst_out = os.path.join(out_dir,fst_root + suffix + dof_suffix + wind_suffix + wave_suffix + '.fst')
+    fst_out = os.path.join(out_dir,fst_root + suffix + dof_suffix + env_suffix + wind_suffix + wave_suffix + '.fst')
     
     # get base file names for all modules
     fst_base  = os.path.join(fst_dir,fst_file)
@@ -108,7 +108,7 @@ def modify_fst_deck(fst_dir,fst_file,out_dir='.',suffix='',wave_suffix='',wind_s
 
     if hydro_dict:
         hd = fstin(hydro_base)
-        hydro_out = fst_root + '_HydroDyn' + suffix + wave_suffix + '.dat'
+        hydro_out = fst_root + '_HydroDyn' + suffix + env_suffix + wave_suffix + '.dat'
         hydro_dict['PotFile'] = '"{}"'.format(os.path.join(os.path.relpath(hydro_dir,out_dir),hd['PotFile'].replace('"','')))
         modify_input_file(hydro_base,os.path.join(out_dir,hydro_out),hydro_dict)
         fst_dict['HydroFile'] = '"{}"'.format(hydro_out)
@@ -129,7 +129,7 @@ def modify_fst_deck(fst_dir,fst_file,out_dir='.',suffix='',wave_suffix='',wind_s
         fst_dict['EDFile'] = '"{}"'.format(os.path.relpath(elasto_base,out_dir))
 
     if inflow_dict:
-        inflow_out = fst_root + '_Inflow' + suffix + wind_suffix + '.dat'
+        inflow_out = fst_root + '_Inflow' + suffix + env_suffix + wind_suffix + '.dat'
         modify_input_file(inflow_base,os.path.join(out_dir,inflow_out),inflow_dict)
         fst_dict['InflowFile'] = '"{}"'.format(inflow_out)
     else:
