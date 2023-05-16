@@ -124,7 +124,6 @@ def modify_fst_deck(fst_dir,fst_file,out_dir='.',suffix='',env_suffix='',wave_su
         elasto_dict['TwrFile'] = '"{}"'.format(os.path.join(os.path.relpath(elasto_dir,out_dir),ed['TwrFile'].replace('"','')))
         modify_input_file(elasto_base,os.path.join(out_dir,elasto_out),elasto_dict)
         fst_dict['EDFile'] = '"{}"'.format(elasto_out)
-        hydro_dict['PotFile'] = os.path.join(fst_dir,hd['PotFile'].replace('"',''))
     else:
         fst_dict['EDFile'] = '"{}"'.format(os.path.relpath(elasto_base,out_dir))
 
