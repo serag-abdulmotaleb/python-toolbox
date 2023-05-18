@@ -214,11 +214,9 @@ def process_key_series(xpkl_file,T_seg,T_trans=0.,ypkl_file=None):
         stats_df.loc[stats_df.shape[0],:] = [c,x_tot.mean(), x_tot.std(), np.abs(x_tot).max()]
         spectra_df['Freq_[Hz]'] = f
         spectra_df[f'c{c}'] = np.mean(np.array(PSD),axis=0)
-        
-
 
         stats_df.to_csv('stats_' + xpkl_file.strip('.pkl') + '.csv')
         spectra_df.to_pickle('psd_' + xpkl_file.strip('.pkl') + '.pkl')
         if ypkl_file:
             crspectra_df[f'c{c}'] = np.mean(np.array(CSD),axis=0)
-            spectra_df.to_pickle('csd_' + xpkl_file.strip('.pkl') + '_' + ypkl_file.strip('.pkl') + '.pkl')
+            crspectra_df.to_pickle('csd_' + xpkl_file.strip('.pkl') + '_' + ypkl_file.strip('.pkl') + '.pkl')
