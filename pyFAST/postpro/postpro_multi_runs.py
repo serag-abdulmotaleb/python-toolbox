@@ -32,9 +32,10 @@ def find_env_cond(fst_file):
             Uw = inflow['HWindSpeed']
             TI = 0.
         elif inflow['WindType'] == 3:
-            inflow_dir = os.path.dirname(os.path.abspath(inflow_file))
+            inflow_dir = os.path.dirname(os.path.abspath(os.path.join(fst_dir,inflow_file)))
             bts_file = inflow['FileName_BTS'].strip('"')
-            inp_file = os.path.join(fst_dir,inflow_dir,bts_file.strip('.bts') + '.inp')
+            inp_file = os.path.join(fst_dir,inflow_dir,bts_file)
+            inp_file = inp_file.strip('.bts') + '.inp'
             inp = fstin(inp_file)
             Uw = inp['URef']
             TI = inp['IECturbc']
@@ -171,7 +172,7 @@ def process_key_series(xpkl_file,T_seg,T_trans=0.,ypkl_file=None):
     xpkl_file : str
         pkl file that has the series for which the stats and PSDs to be generated.
     T_seg : float
-        Time segment of Welch's method.
+        Window length for Welch's method.
     T_trans : float, optional
         Transient time to drop at the begining of the series. The default is 0..
     ypkl_file : str, optional
@@ -203,11 +204,11 @@ def process_key_series(xpkl_file,T_seg,T_trans=0.,ypkl_file=None):
 
         for col in dfc_x.columns:
             x = dfc_x[col].to_numpy()
-            (f,Sxx) = sg.welch(x,fs,nperseg=int(T_seg/T_sim*len(t)))
+            (f,Sxx) = sg.welch(x,fs,nperseg=int(T_seg/dt))
             PSD.append(Sxx)
             if ypkl_file:
                 y = dfc_y[col].to_numpy()
-                (f,Sxy) = sg.csd(x,y,fs,nperseg=int(T_seg/T_sim*len(t)))
+                (f,Sxy) = sg.csd(x,y,fs,nperseg=int(T_seg/dt))
                 CSD.append(Sxy)
         
         x_tot = dfc_x.stack().to_numpy()
@@ -219,5 +220,6 @@ def process_key_series(xpkl_file,T_seg,T_trans=0.,ypkl_file=None):
         spectra_df.to_pickle('psd_' + xpkl_file.strip('.pkl') + '.pkl')
         if ypkl_file:
             crspectra_df['Freq_[Hz]'] = f
-            crspectra_df[f'c{c}'] = np.mean(np.array(CSD),axis=0)
+            CSD = np.array(CSD)
+            crspectra_df[f'c{c}'] = np.mean(np.abs(CSD),axis=0)*np.exp(1j*np.mean(np.angle(CSD),axis=0))
             crspectra_df.to_pickle('csd_' + xpkl_file.strip('.pkl') + '_' + ypkl_file.strip('.pkl') + '.pkl')
