@@ -90,7 +90,7 @@ def gen_conditions_df(out_files):
             df_conds.loc[df_conds.shape[0]] = [condition,Uw,TI,Hs,Tp,gamma,seeds,[out_file]]
     return df_conds
 
-def extract_key_series(out_files,keys):
+def extract_key_series(out_files,keys,prefix=''):
     """
     Reads out/outb files and generates pkl files which contains the time series of selected keys in multiple conditions.
     Each column of the pkl file corresponds to a condition and the condtions are summarized and numbered in a csv file.
@@ -117,9 +117,9 @@ def extract_key_series(out_files,keys):
                 out_df['Time_[s]'] = df['Time_[s]']
                 out_df[f'c{condition}s{seed}'] = df[key]
 
-    df_conds.to_csv('conditions.csv')        
+    df_conds.to_csv(prefix + 'conditions.csv')        
     for out_df,key in zip(out_dfs,keys):
-        out_df.to_pickle(key.replace('/s','s-1')+'.pkl')
+        out_df.to_pickle(prefix + key.replace('/s','s-1')+'.pkl')
 
 def filter_key_series(pkl_file,lpf=None,hpf=None):
     """
@@ -163,7 +163,7 @@ def filter_key_series(pkl_file,lpf=None,hpf=None):
         df.to_pickle(pkl_file.strip('.pkl') + lf + hf + '.pkl')
 
 
-def process_key_series(xpkl_file,T_seg,T_trans=0.,ypkl_file=None):
+def process_key_series(xpkl_file,T_seg,T_trans=0.,ypkl_file=None,prefix=''):
     """
     Generates stats and PSDs for columns in a pkl file. Can also generate CSDs if another pkl file is provided.
 
@@ -216,10 +216,10 @@ def process_key_series(xpkl_file,T_seg,T_trans=0.,ypkl_file=None):
         spectra_df['Freq_[Hz]'] = f
         spectra_df[f'c{c}'] = np.mean(np.array(PSD),axis=0)
 
-        stats_df.to_csv('stats_' + xpkl_file.strip('.pkl') + '.csv')
-        spectra_df.to_pickle('psd_' + xpkl_file.strip('.pkl') + '.pkl')
+        stats_df.to_csv(prefix + 'stats_' + xpkl_file.strip('.pkl') + '.csv')
+        spectra_df.to_pickle(prefix + 'psd_' + xpkl_file.strip('.pkl') + '.pkl')
         if ypkl_file:
             crspectra_df['Freq_[Hz]'] = f
             CSD = np.array(CSD)
             crspectra_df[f'c{c}'] = np.mean(np.abs(CSD),axis=0)*np.exp(1j*np.mean(np.angle(CSD),axis=0))
-            crspectra_df.to_pickle('csd_' + xpkl_file.strip('.pkl') + '_' + ypkl_file.strip('.pkl') + '.pkl')
+            crspectra_df.to_pickle(prefix + 'csd_' + xpkl_file.strip('.pkl') + '_' + ypkl_file.strip('.pkl') + '.pkl')
