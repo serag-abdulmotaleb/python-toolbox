@@ -7,6 +7,7 @@ Created on Mon Mar 20 09:08:03 2023
 import os
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from pyFAST.input_output.fast_input_file import FASTInputFile as fstin
 
 def find_mass_props(fst_file,ref2rt = np.zeros([0,0,0]), azimuth = 0.):
@@ -133,7 +134,197 @@ def find_mass_props(fst_file,ref2rt = np.zeros([0,0,0]), azimuth = 0.):
                       
     return m,r_cg,MOI,I_rot,df
     
+def get_mass_props(fst_file,csv_out=False,plot_wt=False,elev=20,azim=-90):
+
+    N = 8 # ptfm - tower - nacelle - yawbr - hub - blade 1 - blade 2 - blade 3
+    n = 0
+    m_n = np.zeros((N,1)) # component mass
+    r_n = np.zeros((N,3)) # component cg
+    i_n = np.zeros((N,3,3)) # component local inertia matrix
+
+    root_folder = os.path.dirname(fst_file)
+    fst = fstin(fst_file)
+    ED_file = os.path.join(root_folder,fst['EDFile'].strip('"').strip("'"))
+    ED_dict = fstin(ED_file)
+
+    # Platfrom
+    m_n[n] += ED_dict['PtfmMass']
+    i_n[n] += np.diag([ED_dict[f'Ptfm{i}Iner'] for i in ['R','P','Y']])
+    r_n[n] += np.array([ED_dict[f'PtfmCM{i}t'] for i in ['x','y','z']])
+    r_n[n,2] += ED_dict['PtfmRefzt']
+    n += 1
+
+    # Tower (Tower props relative to tower base)
+    twr_ht = ED_dict['TowerHt']
+    twr_bs = ED_dict['TowerBsHt']
+    twr_file = os.path.join(root_folder,ED_dict['TwrFile'].strip('"').strip("'"))
+    twr_dict = fstin(twr_file)
+    twr_props = twr_dict['TowProp']
+    ht_fract = twr_props[:,0]
+    twr_sec_ht = ht_fract*(twr_ht-twr_bs)
+    twr_mden = twr_props[:,1]*twr_dict['AdjTwMa']
+    twr_mass = np.trapz(twr_mden,twr_sec_ht)
+    twr_cm_z = np.trapz(twr_mden*twr_sec_ht,twr_sec_ht)/twr_mass + twr_bs
+    twr_moi = np.zeros(3)
+    twr_moi[0] = np.trapz(twr_mden*(twr_sec_ht-twr_cm_z)**2,twr_sec_ht)
+    twr_moi[1] = twr_moi[0]
+
+    m_n[n] = twr_mass
+    r_n[n] = np.array([0,0,twr_cm_z])
+    i_n[n] = np.diag(twr_moi)
+    n += 1
+
+    # Nacelle
+    overhang = ED_dict['OverHang']
+    shft_tilt = ED_dict['ShftTilt']*np.pi/180
+    twr2shft = ED_dict['Twr2Shft']
+    hub_cm = ED_dict['HubCM']
+
+    r_apex = np.array([                    overhang * np.cos(shft_tilt),
+                                                                     0.,
+                       twr_ht + twr2shft + overhang * np.sin(shft_tilt)])
+
+    m_n[n] += ED_dict['NacMass']
+    i_n[n] += np.diag([0,0,ED_dict['NacYIner']])
+    r_n[n] += np.array([ED_dict[f'NacCM{i}n'] for i in ['x','y','z']])
+    r_n[n,2] += twr_ht
+    n += 1
+
+    # Yaw Bearing
+    m_n[n] += ED_dict['YawBrMass']
+    r_n[n,2] += twr_ht
+    n += 1
+
+    # Hub
+    m_n[n] += ED_dict['HubMass']
+    r_n[n] += r_apex + hub_cm * np.array([np.cos(shft_tilt),0.,np.sin(shft_tilt)])
+    n += 1
+
+    # Blades
+    R_rotor = ED_dict['TipRad']
+    blade_files = [os.path.join(root_folder,ED_dict[f'BldFile{i+1}'].strip('"').strip("'")) for i in range(ED_dict['NumBl'])]
+    I_rotor = ED_dict['HubIner']
+    blds_r1 = np.zeros((len(blade_files),3))
+    blds_r2 = np.zeros((len(blade_files),3))
+
+    azimuth = 0
+    for b,bld_file in enumerate(blade_files):
+        precone = ED_dict[f'PreCone({b+1})']*np.pi/180
+        bld = fstin(bld_file)
+        bld_prop = bld['BldProp']
+
+        ## node locations
+        bld_fract = bld_prop[:,0]
+        bld_sec_R = bld_fract * (ED_dict['TipRad']-ED_dict['HubRad'])
+        
+        alpha = -shft_tilt
+        theta = precone
+
+        if azimuth < np.pi/2 or azimuth > 3*np.pi/2:
+            theta = precone
+        else:
+            theta = np.pi - (precone)
+
+        bld_sec_x = r_apex[0] + bld_sec_R*np.abs(np.cos(azimuth))*( np.sin(theta)*np.cos(alpha) + np.cos(theta)*np.sin(alpha))
+        bld_sec_y = r_apex[1] + bld_sec_R*np.sin(azimuth)
+        bld_sec_z = r_apex[2] + bld_sec_R*np.abs(np.cos(azimuth))*(-np.sin(theta)*np.sin(alpha) + np.cos(theta)*np.cos(alpha))
+
+        blds_r1[b] = np.array([bld_sec_x[0],bld_sec_y[0],bld_sec_z[0]]) # for plotting
+        blds_r2[b] = np.array([bld_sec_x[-1],bld_sec_y[-1],bld_sec_z[-1]]) # for plotting
+
+        ## mass density
+        bld_mden = bld_prop[:,3]*bld['AdjBlMs']
+
+        ## blade mass
+        bld_mass = np.trapz(bld_mden,bld_sec_R)
+
+        ## blade center of mass
+        bld_Rcm = np.trapz(bld_mden*bld_sec_R,bld_sec_R)/bld_mass # distance from rotor apex
+        bld_cm = np.array([np.trapz(bld_mden*bld_sec_x,bld_sec_R)/bld_mass, # global x location
+                           np.trapz(bld_mden*bld_sec_y,bld_sec_R)/bld_mass, # global y location
+                           np.trapz(bld_mden*bld_sec_z,bld_sec_R)/bld_mass]) # global z location
+
+        ## blade moments of inertia
+        I_rotor += np.trapz(bld_mden*((bld_sec_R + ED_dict['HubRad']) * np.cos(precone))**2,bld_sec_R) # about rotor axis
+        bld_moi = np.array([np.trapz(bld_mden * ((bld_sec_y-bld_cm[1])**2 + (bld_sec_z-bld_cm[2])**2),bld_sec_R), # about local x-axis passing through blade cm
+                            np.trapz(bld_mden * ((bld_sec_x-bld_cm[0])**2 + (bld_sec_z-bld_cm[2])**2),bld_sec_R), # about local y-axis passing through blade cm
+                            np.trapz(bld_mden * ((bld_sec_x-bld_cm[0])**2 + (bld_sec_y-bld_cm[1])**2),bld_sec_R)]) # about local z-axis passing through blade cm
+
+        ## assign mass props
+        m_n[n] = bld_mass
+        r_n[n] = bld_cm
+        i_n[n] = np.diag(bld_moi)
+        n += 1
+        azimuth += 2*np.pi/3
+
+    # Evaluate global mass props about MSL
+    moi_mat = np.ones((3,3)) - np.eye(3)
+    m_tot = np.sum(m_n)
+    r_cg = np.sum(m_n*r_n,axis=0) / m_tot
+
+    M = np.zeros((6,6))
+    M[:3,:3] += np.eye(3) * m_tot
+    M[3:,3:] += np.sum(i_n,axis=0) # add local inertia
+    M[3:,3:] += np.diag(np.sum(m_n[:,None] * (moi_mat[None,:,:] @ r_n[:,:,None]**2),axis=0)[:,0])
     
+    M[:3,3:] += m_tot * np.array([[        0.0,     r_cg[2], -r_cg[1]],
+                                  [-r_cg[2],            0.0,  r_cg[0]],
+                                  [ r_cg[1], -r_cg[0],           0.0]])
+    M[3:,:3] += M[:3,3:].T
+
+    columns = ['mass','x_g','y_g','z_g','i_xx','i_yy','i_zz']
+    components = np.array(['platform','tower','nacelle','yaw_bear','hub','blade_1','blade_2','blade_3'])
+
+    data = np.vstack((m_n[:,0],r_n[:,0],r_n[:,1],r_n[:,2],i_n[:,0,0],i_n[:,1,1],i_n[:,2,2])).T
+
+    sum_df = pd.DataFrame(columns=columns,data=data,index=components)
+
+    if csv_out:
+        sum_df.to_csv(csv_out)
+    
+    if plot_wt:
+        fig = plt.figure(figsize=(15,15))
+        ax = fig.add_subplot(111, projection='3d')
+
+        ax.plot(0,0,0,'+b',label='origin')
+        n=0
+        ax.plot(r_n[n,0],r_n[n,1],r_n[n,2],c='orange',marker='s',label='Platform cg',ls='None') # platform
+        n+=1
+
+        ax.plot([0,0],[0,0],[twr_bs,twr_ht],c='grey') # tower line
+        ax.plot(r_n[n,0],r_n[n,1],r_n[n,2],c='grey',marker='x',label='Tower cg',ls='None') # tower cg
+        n+=1
+
+        ax.plot(r_n[n,0],r_n[n,1],r_n[n,2],c='blue',marker='o',label='Nacelle cg',ls='None') # tower cg
+        n+=1
+
+        ax.plot(r_n[n,0],r_n[n,1],r_n[n,2],c='red',marker='o',label='Yaw bearing cg',ls='None') # tower cg
+        n+=1
+
+        ax.plot(r_n[n,0],r_n[n,1],r_n[n,2],c='green',marker='o',label='Hub cg',ls='None') # tower cg
+        n+=1
+
+        ax.plot([0,r_apex[0]],[0,r_apex[1]],[twr_ht+twr2shft,r_apex[2]],c='black',ls='--',label='shaft') # shaft
+
+        for b in range(len(blade_files)):
+            ax.plot([blds_r1[b,0],blds_r2[b,0]],[blds_r1[b,1],blds_r2[b,1]],[blds_r1[b,2],blds_r2[b,2]],c='black',ls='-') # shaft
+            ax.plot(r_n[n,0],r_n[n,1],r_n[n,2],c='black',marker='x',label='bld cg',ls='None') # tower cg
+            n+=1
+
+        fs_range = np.arange(-100,101,200)
+        fs_x,fs_y = np.meshgrid(fs_range,fs_range)
+        ax.plot_surface(fs_x,fs_y,np.zeros_like(fs_x),color='blue',alpha=0.25)
+        ax.view_init(elev=elev, azim=azim)
+        ax.set_xlabel('x (m)')
+        ax.set_ylabel('y (m)')
+        ax.set_zlabel('z (m)')
+        plt.sca(ax)
+        plt.grid()
+        plt.legend()
+        plt.axis('equal')
+
+    return M,r_cg,I_rotor,R_rotor,sum_df
+
 
 if __name__ == '__main__':
     fst_file = r'openfast_models\15MW_UMaineVolturnUS-S\IEA-15-240-RWT-UMaineSemi\IEA-15-240-RWT-UMaineSemi.fst'
