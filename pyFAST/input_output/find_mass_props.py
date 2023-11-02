@@ -135,6 +135,35 @@ def find_mass_props(fst_file,ref2rt = np.zeros([0,0,0]), azimuth = 0.):
     return m,r_cg,MOI,I_rot,df
     
 def get_mass_props(fst_file,csv_out=False,plot_wt=False,elev=20,azim=-90):
+    """Evaluates mass distribution of an OpenFAST model about the intersection of the tower with the MSL.
+    (assumes all mass is modeled in ElastoDyn)
+
+    Parameters
+    ----------
+    fst_file : str
+        fst file directory
+    csv_out : bool, optional
+        Save mass properties summary in a csv file.  by default False.
+    plot_wt : bool, optional
+        Plot 3D visualization of the WT. by default False.
+    elev : int, optional
+        Elevation angle of 3D plot by default 20
+    azim : int, optional
+        Azimuth angle of 3D plot, by default -90
+
+    Returns
+    -------
+    M : numpy array
+        mTotal ass matrix
+    r_cg : numpy array
+        Total COG vector
+    I_rotor : float
+        Rotor moment of inertia about LSS.
+    R_rotor : float
+        Rotor radius
+    sum_df : pandas DataFrame
+        A dataframe to summarize mass properties of different WT components.
+    """
 
     N = 8 # ptfm - tower - nacelle - yawbr - hub - blade 1 - blade 2 - blade 3
     n = 0
